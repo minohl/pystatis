@@ -75,7 +75,7 @@ def load_data(
                 # in rare cases it seems that asking catalogue/jobs endpoint for the state of the newly created job fails because no job could be found
                 # so we add 5 seconds here to make sure that the job was created in the meantime
                 time.sleep(5)
-                response = get_data_from_resultfile(job_id, db_name)
+                response = get_data_from_resultfile(job_id, db_name, params)
                 assert isinstance(response.content, bytes)  # nosec assert_used
                 content_type = response.headers.get("Content-Type", "text/csv").split(
                     "/"
@@ -201,7 +201,7 @@ def get_job_id_from_response(response: requests.Response) -> str:
 
 
 def get_data_from_resultfile(
-    job_id: str, db_name: str | None = None
+    job_id: str, db_name: str | None = None, resultfile_params: ParamDict = None
 ) -> requests.Response:
     """Get data from a job once it is finished or when the timeout is reached.
 
@@ -250,14 +250,19 @@ def get_data_from_resultfile(
         return bytes()
 
     time.sleep(5)
-    params = {
-        "name": job_id,
-        "area": "all",
-        "compress": "true",
-        "format": "ffcsv",
-    }
+    # We should pass the original request params to the resultfile method since it would otherwise use the default "compress": "false"
+    if not resultfile_params:
+        resultfile_params = {
+            "name": job_id,
+            "area": "all",
+            "compress": "false",
+            "format": "ffcsv",
+        }
+    # overwrite the original request's table name with job_id which is the name of the desired resultfile
+    else:
+        resultfile_params["name"] = job_id
     response = get_data_from_endpoint(
-        endpoint="data", method="resultfile", params=params, db_name=db_name
+        endpoint="data", method="resultfile", params=resultfile_params, db_name=db_name
     )
     return response
 
