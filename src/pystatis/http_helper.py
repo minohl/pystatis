@@ -88,6 +88,10 @@ def load_data(
             if content_type == "zip":
                 data = cache.read_from_cache(cache_dir, name, params)
     else:
+        # params["name"] is somehow permanently set to job_id after call to resultfile
+        # this ensures we get the metadata for the requested table
+        params["name"] = name
+
         response = get_data_from_endpoint(endpoint, method, params, db_name)
         data = response.content
 
@@ -252,7 +256,7 @@ def get_data_from_resultfile(
     time.sleep(5)
     # We should pass the original request params to the resultfile method since it would otherwise use the default "compress": "false"
     if not resultfile_params:
-        resultfile_params = {
+        params = {
             "name": job_id,
             "area": "all",
             "compress": "false",
@@ -260,9 +264,10 @@ def get_data_from_resultfile(
         }
     # overwrite the original request's table name with job_id which is the name of the desired resultfile
     else:
-        resultfile_params["name"] = job_id
+        params = resultfile_params
+        params["name"] = job_id
     response = get_data_from_endpoint(
-        endpoint="data", method="resultfile", params=resultfile_params, db_name=db_name
+        endpoint="data", method="resultfile", params=params, db_name=db_name
     )
     return response
 
