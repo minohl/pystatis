@@ -62,7 +62,7 @@ def load_data(
             try:
                 # test for job-relevant status code
                 response_status_code = response.json().get("Status").get("Code")
-            except json.decoder.JSONDecodeError:
+            except (json.decoder.JSONDecodeError, requests.exceptions.JSONDecodeError):
                 pass
 
             if response_status_code == 98:
@@ -214,33 +214,36 @@ def get_data_from_resultfile(
         requests.Response: the response object holding the response from calling the Destatis endpoint.
     """
     params = {
-        "selection": "*" + job_id,
+        "selection": job_id,
         "searchcriterion": "code",
         "sortcriterion": "code",
         "type": "all",
+        "area": "user",
     }
 
     time_ = time.perf_counter()
 
     while (time.perf_counter() - time_) < JOB_TIMEOUT:
-        response = get_data_from_endpoint(
-            endpoint="catalogue", method="jobs", params=params, db_name=db_name
-        )
-
-        jobs = response.json().get("List")
-        if len(jobs) > 0 and jobs[0].get("State") == "Fertig":
-            logger.info(
-                (
-                    "Verarbeitung im Hintergrund abgeschlossen. "
-                    "Ergebnis kann jetzt abgerufen werden über "
-                    "/data/resultfile und Job-ID: %s."
-                ),
-                job_id,
+        try:
+            response = get_data_from_endpoint(
+                endpoint="catalogue", method="results", params=params, db_name=db_name
             )
-            break
-        else:
-            logger.info("Verarbeitung im Hintergrund läuft noch...")
 
+            jobs = response.json().get("List")
+            if len(jobs) > 0:
+                logger.info(
+                    (
+                        "Verarbeitung im Hintergrund abgeschlossen. "
+                        "Ergebnis kann jetzt abgerufen werden über "
+                        "/data/resultfile und Job-ID: %s."
+                    ),
+                    job_id,
+                )
+                break
+            else:
+                logger.info("Verarbeitung im Hintergrund läuft noch...")
+        except DestatisStatusError as e:
+            logger.warning(e)
         time.sleep(5)
     else:
         print("Time out exceeded! Aborting...")
@@ -250,7 +253,7 @@ def get_data_from_resultfile(
     params = {
         "name": job_id,
         "area": "all",
-        "compress": "false",
+        "compress": "true",
         "format": "ffcsv",
     }
     response = get_data_from_endpoint(
